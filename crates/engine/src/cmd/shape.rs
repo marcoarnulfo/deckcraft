@@ -1050,12 +1050,34 @@ fn crop(s: &mut Session, p: &Value) -> Result<Value> {
     })
 }
 
+/// Why Sharpen/Soften can't be changed on this picture, if it can't. A picture PowerPoint saved
+/// processed shows its processed pixels and keeps its original for PowerPoint; one with an
+/// artistic effect would be read by PowerPoint as sharpened before the effect, not after.
+pub fn sharpen_locked(fill: &PictureFill) -> Option<&'static str> {
+    if fill.adjust.sharpen_original.is_some() {
+        Some("this picture was already processed in PowerPoint")
+    } else if fill.artistic.is_some() {
+        Some("Sharpen/Soften isn't available on a picture with an artistic effect")
+    } else {
+        None
+    }
+}
+
 fn picture_adjust(s: &mut Session, p: &Value) -> Result<Value> {
     edit_shapes(s, p, "picture.adjust", |sh| {
         if let deckcraft_model::ShapeKind::Picture { fill } = &mut sh.kind {
+            let locked = sharpen_locked(fill);
+            if let (Some(why), Some(_)) = (locked, p.get("sharpen")) {
+                return Err(bad("picture.adjust", why));
+            }
             let a = &mut fill.adjust;
             if bool_or(p, "reset", false) {
+                // A processed picture keeps its amount and its original.
+                let keep = (a.sharpen, a.sharpen_original);
                 *a = Default::default();
+                if locked.is_some() {
+                    (a.sharpen, a.sharpen_original) = keep;
+                }
             }
             if let Some(v) = f64_param(p, "brightness") {
                 a.brightness = v.clamp(-1.0, 1.0);
@@ -1065,9 +1087,6 @@ fn picture_adjust(s: &mut Session, p: &Value) -> Result<Value> {
             }
             if let Some(v) = f64_param(p, "sharpen").filter(|v| v.is_finite()) {
                 a.sharpen = v.clamp(-1.0, 1.0);
-                // A picture PowerPoint saved processed keeps its pixels; the new amount is drawn
-                // on them from now on.
-                a.sharpen_original = None;
             }
             if let Some(v) = f64_param(p, "saturation") {
                 a.saturation = Some(v.clamp(0.0, 4.0));
@@ -1086,10 +1105,16 @@ fn picture_adjust(s: &mut Session, p: &Value) -> Result<Value> {
 fn picture_reset(s: &mut Session, p: &Value) -> Result<Value> {
     edit_shapes(s, p, "picture.reset", |sh| {
         if let deckcraft_model::ShapeKind::Picture { fill } = &mut sh.kind {
+            let a = &fill.adjust;
+            let processed = a.sharpen_original.is_some().then_some((a.sharpen, a.sharpen_original));
             fill.adjust = Default::default();
             fill.crop = [0.0; 4];
             fill.alpha = None;
-            if let Some(a) = fill.artistic.take() {
+            // A picture PowerPoint saved processed keeps its pixels, its effects and its original:
+            // only PowerPoint can redo them from the original.
+            if let Some((amount, original)) = processed {
+                (fill.adjust.sharpen, fill.adjust.sharpen_original) = (amount, original);
+            } else if let Some(a) = fill.artistic.take() {
                 fill.media = a.original;
             }
         }
@@ -1108,6 +1133,10 @@ fn picture_change(s: &mut Session, p: &Value) -> Result<Value> {
             fill.media = media;
             fill.crop = [0.0; 4];
             fill.artistic = None;
+            // The new picture is not the one PowerPoint processed.
+            if fill.adjust.sharpen_original.take().is_some() {
+                fill.adjust.sharpen = 0.0;
+            }
         }
         Ok(())
     })

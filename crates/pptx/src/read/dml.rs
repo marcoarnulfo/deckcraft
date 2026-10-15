@@ -149,8 +149,7 @@ pub fn blip_fill(imp: &mut Imp, part: &Part, bf: &El) -> Option<PictureFill> {
             .filter(|v| v.is_finite() && *v != 0.0)
     {
         pf.adjust.sharpen = amount.clamp(-1.0, 1.0);
-        if pf.artistic.is_none()
-            && let Some(original) = media_ref(imp, part, layer)
+        if let Some(original) = media_ref(imp, part, layer)
             && original != pf.media
         {
             pf.adjust.sharpen_original = Some(original);

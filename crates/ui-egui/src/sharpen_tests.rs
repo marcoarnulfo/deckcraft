@@ -3,7 +3,7 @@
 use deckcraft_engine::Session;
 use deckcraft_model::ShapeKind;
 use egui_kittest::Harness;
-use egui_kittest::kittest::Queryable;
+use egui_kittest::kittest::{NodeT, Queryable};
 use serde_json::json;
 
 use crate::{Services, SlideApp};
@@ -48,6 +48,7 @@ fn corrections_menu_sharpens_and_softens_in_one_step() {
     let n = h.state().session.active().unwrap().history.undo.len();
     h.get_by_label_contains("Corrections").click();
     h.run_steps(2);
+    assert!(!h.get_by_label("Sharpen 25%").accesskit_node().is_disabled());
     h.get_by_label("Sharpen 25%").click();
     h.run_steps(2);
     assert_eq!(sharpen(&h), 0.25);
@@ -57,6 +58,23 @@ fn corrections_menu_sharpens_and_softens_in_one_step() {
     h.get_by_label("Soften 50%").click();
     h.run_steps(2);
     assert_eq!(sharpen(&h), -0.5);
+}
+
+#[test]
+fn corrections_menu_leaves_a_picture_with_an_artistic_effect_alone() {
+    let mut h = harness();
+    h.state_mut().session.execute("picture.artisticEffect", &json!({"effect": "artisticBlur"})).unwrap();
+    h.run_steps(2);
+    let n = h.state().session.active().unwrap().history.undo.len();
+    h.get_by_label_contains("Corrections").click();
+    h.run_steps(2);
+    for label in ["Soften 50%", "Sharpen/Soften 0%", "Sharpen 25%"] {
+        assert!(h.get_by_label(label).accesskit_node().is_disabled(), "{label}");
+    }
+    h.get_by_label("Sharpen 25%").click();
+    h.run_steps(2);
+    assert_eq!(sharpen(&h), 0.0);
+    assert_eq!(h.state().session.active().unwrap().history.undo.len(), n);
 }
 
 #[test]

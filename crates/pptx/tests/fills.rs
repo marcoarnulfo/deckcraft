@@ -303,45 +303,54 @@ fn sharpen_and_soften_round_trip_with_their_exact_amount() {
 
 #[test]
 fn a_powerpoint_picture_already_sharpened_keeps_its_original_and_amount() {
-    // PowerPoint saves the sharpened picture as the blip and the original in the layer.
-    let mut p = defaults::new_presentation(None);
-    let shown = p.add_media("shown.png", "image/png", png()).expect("media");
-    let mut other = png();
-    other.extend_from_slice(b"original");
-    let original = p.add_media("original.png", "image/png", other.clone()).expect("media");
-    let first = p.slides[0].id;
-    for (name, media) in [("Sharp", shown), ("Holder", original)] {
-        let id = ShapeId(p.alloc_id().expect("ids"));
-        p.slide_mut(first).expect("slide").shapes.push(Shape {
-            id,
-            name: name.into(),
-            xfrm: Some(Xfrm::new(10.0, 10.0, 200.0, 100.0)),
-            fill: Some(Fill::Picture(PictureFill { media, ..Default::default() })),
-            ..Default::default()
+    // PowerPoint saves the sharpened picture as the blip and the original in the layer, also
+    // when the layer carries an artistic effect too.
+    for artistic in [false, true] {
+        let mut p = defaults::new_presentation(None);
+        let shown = p.add_media("shown.png", "image/png", png()).expect("media");
+        let mut other = png();
+        other.extend_from_slice(b"original");
+        let original = p.add_media("original.png", "image/png", other.clone()).expect("media");
+        let first = p.slides[0].id;
+        for (name, media) in [("Sharp", shown), ("Holder", original)] {
+            let id = ShapeId(p.alloc_id().expect("ids"));
+            p.slide_mut(first).expect("slide").shapes.push(Shape {
+                id,
+                name: name.into(),
+                xfrm: Some(Xfrm::new(10.0, 10.0, 200.0, 100.0)),
+                fill: Some(Fill::Picture(PictureFill { media, ..Default::default() })),
+                ..Default::default()
+            });
+        }
+        let bytes = deckcraft_pptx::export(&p).expect("export");
+        let effect = if artistic { "<a14:imgEffect><a14:artisticBlur/></a14:imgEffect>" } else { "" };
+        let edited = edit_slides(&bytes, |x| {
+            let rids: Vec<String> = x.split("<a:blip r:embed=\"").skip(1).filter_map(|r| r.split('"').next().map(str::to_string)).collect();
+            let [a, b] = rids.as_slice() else { panic!("{rids:?}") };
+            x.replacen(
+                &format!("<a:blip r:embed=\"{a}\"/>"),
+                &format!(
+                    "<a:blip r:embed=\"{a}\"><a:extLst><a:ext uri=\"{{BEBA8EAE-BF5A-486C-A8C5-ECC9F3942E4B}}\"><a14:imgProps xmlns:a14=\"http://schemas.microsoft.com/office/drawing/2010/main\"><a14:imgLayer r:embed=\"{b}\">{effect}<a14:imgEffect><a14:sharpenSoften amount=\"-25000\"/></a14:imgEffect></a14:imgLayer></a14:imgProps></a:ext></a:extLst></a:blip>"
+                ),
+                1,
+            )
         });
+        let q = deckcraft_pptx::import(&edited).expect("import");
+        let pf = picture_fill(&edited, "Sharp");
+        assert_eq!(pf.adjust.sharpen, -0.25);
+        assert_eq!(pf.artistic.is_some(), artistic);
+        let orig = pf.adjust.sharpen_original.expect("the original is kept: the blip is already processed");
+        assert_ne!(orig, pf.media);
+        assert_eq!(q.media(orig).map(|m| m.data.to_vec()), Some(other.clone()));
+        // Saved again, the layer is the same: the original, the effects and the amount.
+        let again = deckcraft_pptx::export(&q).expect("export");
+        let back = picture_fill(&again, "Sharp");
+        assert_eq!((back.adjust.sharpen, back.artistic.is_some()), (-0.25, artistic));
+        let r = deckcraft_pptx::import(&again).expect("import");
+        assert_eq!(back.adjust.sharpen_original.and_then(|o| r.media(o)).map(|m| m.data.to_vec()), Some(other.clone()));
+        assert_eq!(r.media(back.media).map(|m| m.data.to_vec()), Some(png()), "the blip stays the processed picture");
+        let x = slide1_xml(&again);
+        assert_eq!(x.contains("<a14:artisticBlur/>"), artistic, "{x}");
+        assert!(x.contains("<a14:sharpenSoften amount=\"-25000\"/>"), "{x}");
     }
-    let bytes = deckcraft_pptx::export(&p).expect("export");
-    let edited = edit_slides(&bytes, |x| {
-        let rids: Vec<String> = x.split("<a:blip r:embed=\"").skip(1).filter_map(|r| r.split('"').next().map(str::to_string)).collect();
-        let [a, b] = rids.as_slice() else { panic!("{rids:?}") };
-        x.replacen(
-            &format!("<a:blip r:embed=\"{a}\"/>"),
-            &format!(
-                "<a:blip r:embed=\"{a}\"><a:extLst><a:ext uri=\"{{BEBA8EAE-BF5A-486C-A8C5-ECC9F3942E4B}}\"><a14:imgProps xmlns:a14=\"http://schemas.microsoft.com/office/drawing/2010/main\"><a14:imgLayer r:embed=\"{b}\"><a14:imgEffect><a14:sharpenSoften amount=\"-25000\"/></a14:imgEffect></a14:imgLayer></a14:imgProps></a:ext></a:extLst></a:blip>"
-            ),
-            1,
-        )
-    });
-    let q = deckcraft_pptx::import(&edited).expect("import");
-    let pf = picture_fill(&edited, "Sharp");
-    assert_eq!(pf.adjust.sharpen, -0.25);
-    let orig = pf.adjust.sharpen_original.expect("the original is kept");
-    assert_ne!(orig, pf.media);
-    assert_eq!(q.media(orig).map(|m| m.data.to_vec()), Some(other.clone()));
-    // Saved again, it is still the processed picture with its original beside it.
-    let again = deckcraft_pptx::export(&q).expect("export");
-    let pf = picture_fill(&again, "Sharp");
-    assert_eq!(pf.adjust.sharpen, -0.25);
-    let r = deckcraft_pptx::import(&again).expect("import");
-    assert_eq!(pf.adjust.sharpen_original.and_then(|o| r.media(o)).map(|m| m.data.to_vec()), Some(other));
 }
