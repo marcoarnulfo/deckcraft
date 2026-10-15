@@ -2687,6 +2687,37 @@ fn artistic_effects_apply_change_remove_and_round_trip() {
     assert_eq!((fill(&s).media, fill(&s).artistic), (original, None));
 }
 
+/// Corrections ▸ Sharpen/Soften: `picture.adjust {sharpen}` sets the amount as one undo step.
+#[test]
+fn picture_adjust_sharpens_and_softens_with_undo() {
+    use deckcraft_model::ShapeKind;
+    let mut png = Vec::new();
+    image::DynamicImage::ImageRgba8(image::RgbaImage::from_pixel(8, 8, image::Rgba([90, 120, 150, 255])))
+        .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+        .unwrap();
+    let mut s = Session::with_new();
+    s.execute("slide.new", &json!({"layout": "blank"})).unwrap();
+    s.execute("insert.picture", &json!({"name": "a.png", "data": cmd::base64_encode(&png)})).unwrap();
+    let adjust = |s: &Session| match &s.doc().unwrap().selected_shapes()[0].kind {
+        ShapeKind::Picture { fill } => fill.adjust.clone(),
+        k => panic!("{k:?}"),
+    };
+    s.execute("picture.adjust", &json!({"sharpen": 0.25})).unwrap();
+    assert_eq!(adjust(&s).sharpen, 0.25);
+    s.execute("picture.adjust", &json!({"sharpen": -3})).unwrap();
+    assert_eq!(adjust(&s).sharpen, -1.0, "soften stops at 100%");
+    s.execute("edit.undo", &json!({})).unwrap();
+    assert_eq!(adjust(&s).sharpen, 0.25);
+    s.execute("edit.undo", &json!({})).unwrap();
+    assert_eq!(adjust(&s).sharpen, 0.0);
+    // Other corrections leave it alone; Reset Picture clears it.
+    s.execute("picture.adjust", &json!({"sharpen": -0.5})).unwrap();
+    s.execute("picture.adjust", &json!({"brightness": 0.2})).unwrap();
+    assert_eq!(adjust(&s).sharpen, -0.5);
+    s.execute("picture.reset", &json!({})).unwrap();
+    assert_eq!(adjust(&s).sharpen, 0.0);
+}
+
 #[test]
 fn handout_master_view_edits_and_round_trips() {
     use deckcraft_model::PhType;

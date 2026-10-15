@@ -427,6 +427,10 @@ fn format_shape(app: &mut SlideApp, ui: &mut Ui) {
             if ui.add(egui::Slider::new(&mut c, -1.0..=1.0).text("Contrast")).drag_stopped() {
                 run(app, "picture.adjust", json!({"contrast": c}));
             }
+            let mut sharp = adj.sharpen as f32;
+            if ui.add(egui::Slider::new(&mut sharp, -1.0..=1.0).text("Sharpness")).drag_stopped() {
+                run(app, "picture.adjust", json!({"sharpen": sharp}));
+            }
             let mut s = adj.saturation.unwrap_or(1.0) as f32;
             if ui.add(egui::Slider::new(&mut s, 0.0..=4.0).text("Saturation")).drag_stopped() {
                 run(app, "picture.adjust", json!({"saturation": s}));

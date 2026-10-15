@@ -143,7 +143,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Corrections",
             ["Picture Format", "Adjust"],
             None,
-            "{brightness?: -1..1, contrast?: -1..1, saturation?: 0..4, grayscale?: bool, transparency?: 0..1, reset?: bool, ids?}",
+            "{brightness?: -1..1, contrast?: -1..1, sharpen?: -1..1 (below 0 softens), saturation?: 0..4, grayscale?: bool, transparency?: 0..1, reset?: bool, ids?}",
             has_selection,
             picture_adjust
         ),
@@ -1062,6 +1062,12 @@ fn picture_adjust(s: &mut Session, p: &Value) -> Result<Value> {
             }
             if let Some(v) = f64_param(p, "contrast") {
                 a.contrast = v.clamp(-1.0, 1.0);
+            }
+            if let Some(v) = f64_param(p, "sharpen").filter(|v| v.is_finite()) {
+                a.sharpen = v.clamp(-1.0, 1.0);
+                // A picture PowerPoint saved processed keeps its pixels; the new amount is drawn
+                // on them from now on.
+                a.sharpen_original = None;
             }
             if let Some(v) = f64_param(p, "saturation") {
                 a.saturation = Some(v.clamp(0.0, 4.0));

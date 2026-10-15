@@ -2587,6 +2587,12 @@ fn picture_format(app: &mut SlideApp, ui: &mut Ui) {
                     run(app, "picture.adjust", json!({"contrast": c}));
                 }
             }
+            ui.separator();
+            for (label, v) in [("Soften 50%", -0.5), ("Soften 25%", -0.25), ("Sharpen/Soften 0%", 0.0), ("Sharpen 25%", 0.25), ("Sharpen 50%", 0.5)] {
+                if ui.button(label).clicked() {
+                    run(app, "picture.adjust", json!({"sharpen": v}));
+                }
+            }
         });
         let r = big_button(ui, Icon::ColorAdjust, "Color", true);
         egui::Popup::menu(&r).show(|ui| {
@@ -3449,6 +3455,10 @@ mod tests {
 #[cfg(test)]
 #[path = "effects_tests.rs"]
 mod effects_tests;
+
+#[cfg(test)]
+#[path = "sharpen_tests.rs"]
+mod sharpen_tests;
 
 #[cfg(test)]
 #[path = "master_layout_tests.rs"]
