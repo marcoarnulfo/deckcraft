@@ -372,7 +372,8 @@ impl ShowState {
                 self.custom = Some(name.clone());
                 return LinkJump::Show(self.goto(pres, i));
             }
-            // Programs and media actions aren't followed.
+            // Programs aren't run. A media action plays its own shape's clip: `click` knows the
+            // shape, this does not.
             Action::Program { .. } | Action::PlayMedia => None,
         };
         match target {
