@@ -579,6 +579,10 @@ pub fn ui(app: &mut SlideApp, ui: &mut Ui) {
     if let Some(id) = gif_click {
         let _ = app.run("media.gifPlay", json!({"id": id}));
     } else if let Some((id, clip)) = media_click {
+        // The clip's own action is not followed here, but its sound goes with the click.
+        if let Some(l) = doc.slides.get(show.state.slide).and_then(|s| s.shapes.iter().find(|sh| sh.id == id)).and_then(|sh| sh.click.clone()) {
+            show.cue_link_sound(&l);
+        }
         app.media.toggle(doc_uid, &doc, id, &clip, crate::media::Owner::Show);
     } else if clicked && let Some(Pick::Text(l)) = under.as_ref().and_then(|u| u.pick.clone()) {
         show.cue_link_sound(&l);
@@ -2296,6 +2300,23 @@ mod tests {
         click_middle(&mut harness);
         assert!(harness.state().media.is_playing(ShapeId(9011)), "the clip plays");
         assert_eq!(harness.state().show.as_ref().map(|s| s.state.slide), Some(0), "and the show stays on the slide");
+    }
+
+    #[test]
+    fn a_clip_on_the_slide_plays_its_action_sound_when_clicked() {
+        use deckcraft_model::text::Action;
+        // `media_hit` takes this click, not the shape's action: the sound has to go with it.
+        let mut doc = Presentation::default();
+        let media = doc.add_media("clip.wav", "audio/wav", wav(30.0)).unwrap();
+        let chime = doc.add_media("chime.wav", "audio/wav", wav(30.0)).unwrap();
+        let clip = deckcraft_model::MediaClip { media, volume: 1.0, ..Default::default() };
+        let mut audio = slide_shape(9031, &doc, action(Action::PlayMedia, Some(chime), false));
+        audio.kind = deckcraft_model::ShapeKind::Media(clip);
+        std::sync::Arc::make_mut(&mut doc.slides[0]).shapes.push(audio);
+        let mut harness = show_harness(doc);
+        click_middle(&mut harness);
+        assert!(harness.state().media.is_playing(ShapeId(9031)), "the clip plays");
+        assert!(sound_playing(&harness), "and so does its action's sound");
     }
 
     #[test]

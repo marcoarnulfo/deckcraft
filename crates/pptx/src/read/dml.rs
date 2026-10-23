@@ -471,7 +471,8 @@ pub fn hyperlink(imp: &mut Imp, part: &Part, h: &El) -> Option<Hyperlink> {
         Action::PlayMedia
     } else if action.starts_with("ppaction://noaction") {
         // Action: None with Play Sound or Stop Previous Sound. Without either (or with a sound
-        // that is not in the file) it does nothing, and a link would only swallow the click.
+        // that does not resolve, such as a missing part) it does nothing, and a link would only
+        // swallow the click. A linked (external) sound resolves and is kept.
         if !stop_sound && h.child("snd").and_then(|s| media_ref(imp, part, s)).is_none() {
             return None;
         }
