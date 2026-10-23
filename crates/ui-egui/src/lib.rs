@@ -1306,8 +1306,12 @@ impl SlideApp {
             };
         }
         let bytes = deckcraft_engine::cmd::file::shapes_picture(d, &d.selection.shapes, "png", 2.0).map(|(b, _, _)| b);
-        self.download(suggested, bytes);
-        Ok(Value::Null)
+        if self.download(suggested, bytes) {
+            Ok(Value::Null)
+        } else {
+            // download() has put the reason in the status bar; run() would overwrite it with this.
+            Err(self.status.as_ref().map(|s| s.0.clone()).unwrap_or_else(|| "could not save the picture".into()))
+        }
     }
 
     pub fn save_as_dialog(&mut self, format: &str) {
@@ -2193,6 +2197,31 @@ mod tests {
         assert_eq!(corner_alpha(&got[0].1), 255, "opaque by default");
         assert_eq!(corner_alpha(&got[1].1), 0, "transparent background");
         assert_eq!(corner_alpha(&got[2].1), 255, "JPEG has no transparency");
+    }
+
+    /// Save as Picture… on the web hands the PNG to the browser; when nothing can take it (no
+    /// download hook), the command fails rather than answering Ok as if it had saved.
+    #[test]
+    fn save_as_picture_on_the_web_reports_a_download_that_did_not_happen() {
+        use std::cell::RefCell;
+        use std::rc::Rc;
+        let selected = || {
+            let mut s = Session::with_new();
+            s.execute("slide.layout", &json!({"layout": "blank"})).unwrap();
+            s.execute("shape.insert", &json!({"preset": "rect", "rect": [100, 100, 200, 100]})).unwrap();
+            s
+        };
+        let got: Rc<RefCell<Vec<String>>> = Rc::default();
+        let log = got.clone();
+        let services =
+            Services { download: Some(Box::new(move |name: &str, _: &[u8]| log.borrow_mut().push(name.to_string()))), ..Default::default() };
+        let mut app = SlideApp::new(selected(), services);
+        assert!(app.run("app.saveAsPictureDialog", json!({})).is_ok());
+        assert_eq!(*got.borrow(), ["Picture.png"]);
+
+        let mut app = SlideApp::new(selected(), Services::default());
+        let err = app.run("app.saveAsPictureDialog", json!({})).unwrap_err();
+        assert!(err.contains("file picker"), "{err}");
     }
 
     fn title_text(app: &SlideApp) -> String {
