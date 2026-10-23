@@ -404,6 +404,7 @@ pub const UI_COMMANDS: &[(&str, &str, Option<&str>, &str)] = &[
     ("app.insertVideoDialog", "Video from File…", None, "{}"),
     ("app.saveAsDialog", "Save As…", None, "{}"),
     ("app.exportDialog", "Export…", None, "{}"),
+    ("app.saveAsPictureDialog", "Save as Picture…", None, "{}"),
     ("app.browseThemeDialog", "Browse for Themes…", None, "{}"),
     ("app.compareDialog", "Compare…", None, "{}"),
     ("app.dialog", "Open Dialog", None, "{id}"),
@@ -1018,6 +1019,7 @@ impl SlideApp {
             "app.insertVideoDialog" => self.pick_and_insert("video", "insert.video"),
             "app.saveAsDialog" => self.save_as_dialog("deckcraft"),
             "app.exportDialog" => self.dialog = Some(dialogs::Dialog::new("export")),
+            "app.saveAsPictureDialog" => return self.save_as_picture_dialog(),
             "app.pasteSpecial" => self.dialog = Some(dialogs::Dialog::new("pasteSpecial")),
             "app.browseThemeDialog" => {
                 if self.session.active().is_none() {
@@ -1276,6 +1278,36 @@ impl SlideApp {
                 f(purpose, id);
             }
         }
+    }
+
+    /// Save as Picture… on the slide's right-click menu (#1073): the selected shapes as one
+    /// picture, through the save picker on the desktop or as a PNG download on the web.
+    fn save_as_picture_dialog(&mut self) -> Result<Value, String> {
+        let Some(d) = self.session.active() else { return Err("open a presentation first".into()) };
+        if d.selection.shapes.is_empty() {
+            return Err(deckcraft_engine::cmd::NOTHING_SELECTED.into());
+        }
+        // PNG first, as in PowerPoint: it keeps the background around the shapes see-through.
+        let suggested = "Picture.png";
+        if let Some(pick) = self.services.pick_save.as_mut() {
+            let Some(mut path) = pick(suggested) else { return Ok(Value::Null) };
+            if std::path::Path::new(&path).extension().is_none() {
+                path.push_str(".png");
+            }
+            return match self.session.execute("shape.saveAsPicture", &json!({"path": path})) {
+                Ok(v) => {
+                    self.set_status(format!("Saved {path}"));
+                    Ok(v)
+                }
+                Err(e) => {
+                    self.set_status(e.to_string());
+                    Err(e.to_string())
+                }
+            };
+        }
+        let bytes = deckcraft_engine::cmd::file::shapes_picture(d, &d.selection.shapes, "png", 2.0).map(|(b, _, _)| b);
+        self.download(suggested, bytes);
+        Ok(Value::Null)
     }
 
     pub fn save_as_dialog(&mut self, format: &str) {
