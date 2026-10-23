@@ -2260,6 +2260,20 @@ mod tests {
     }
 
     #[test]
+    fn a_sound_only_action_plays_its_sound_and_stays_on_the_slide() {
+        use deckcraft_model::text::Action;
+        let mut doc = Presentation::default();
+        doc.slides.push(std::sync::Arc::new(deckcraft_model::Slide { id: deckcraft_model::SlideId(7001), ..Default::default() }));
+        let buzz = doc.add_media("buzz.wav", "audio/wav", wav(30.0)).unwrap();
+        let button = slide_shape(9001, &doc, action(Action::NoAction, Some(buzz), false));
+        std::sync::Arc::make_mut(&mut doc.slides[0]).shapes.push(button);
+        let mut harness = show_harness(doc);
+        click_middle(&mut harness);
+        assert!(sound_playing(&harness));
+        assert_eq!(harness.state().show.as_ref().map(|s| s.state.slide), Some(0), "a click on the button is not a click on the slide");
+    }
+
+    #[test]
     fn a_play_media_action_plays_a_clip_inside_a_group() {
         use deckcraft_model::text::Action;
         // A click on a clip that is on the slide itself toggles it already (`media_hit`); one

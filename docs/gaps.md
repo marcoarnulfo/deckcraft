@@ -216,7 +216,7 @@ of the effect gallery. Detail in [animation-parity.md](animation-parity.md). 8â€
   when clicked, and those decks have not been run again, so why is not known. What the show does
   now (`crates/ui-egui/src/show.rs`): a media action plays its clip also inside a group, an
   action's sound (`a:snd`) plays with the action, and Stop Previous Sound stops the sounds and
-  audio clips that are playing.
+  audio clips that are playing. A sound-only action (`ppaction://noaction`) is kept from PPTX.
   Still open: hover sounds do not play; triggers that start on `onStopAudio` or `begin` conditions are
   not read as triggers; click boxes are the shape's bounding box (a hexagon's corners count) and do
   not follow a shape that a motion path has moved. Trigger sequences now keep their separate
@@ -361,7 +361,7 @@ Detail in [localization-parity.md](localization-parity.md).
 
 | Date | Change | Summary |
 |---|---|---|
-| 2026-10-23 | minor | Interactive decks: media actions play clips in groups, action sounds play with their action and Stop Previous Sound stops sounds and audio clips. The two game decks were not run again, so the entry stays open with hover sounds, audio-started triggers and click boxes |
+| 2026-10-23 | minor | Interactive decks: media actions play clips in groups, action sounds play with their action and Stop Previous Sound stops sounds and audio clips; sound-only actions are read from PPTX. The two game decks were not run again, so the entry stays open with hover sounds, audio-started triggers and click boxes |
 | 2026-10-18 | minor | Native chart payloads use referenced ZIP members and share media byte/item limits; old inline sidecars remain readable. Synthetic tests cover multi-megabyte layout, all shape owners, shared budgets, missing/corrupt members and invalid references. Scores and milestone scope unchanged |
 | 2026-10-15 | trivial | Native saves retain chart package parts and relationships, including charts in groups; edited chart data still does not export a stale source workbook. Chart editing gaps and scores remain unchanged |
 | 2026-10-15 | trivial | PPTX trigger sequences keep later On Click steps instead of converting them to After Previous; mixed starts, independent buttons and paragraph builds have synthetic round-trip regressions |

@@ -131,7 +131,7 @@ app's JSON control channel (`deckcraft --control PORT`).
 
 | Date | What landed |
 |---|---|
-| 2026-10-23 | Slide show: a click on a shape whose action plays its clip (`ppaction://media`) plays it, also inside a group, and an action's sound plays along with the action; Stop Previous Sound stops the sounds and audio clips playing. |
+| 2026-10-23 | Slide show: a click on a shape whose action plays its clip (`ppaction://media`) plays it, also inside a group, and an action's sound plays along with the action; Stop Previous Sound stops the sounds and audio clips playing. A sound-only action (Action: None with Play Sound) survives opening a .pptx |
 | 2026-10-18 | Native chart sidecar bytes move from JSON arrays into referenced ZIP entries, with shared media byte/item limits and bounded reads; older inline sidecars still load. Synthetic format regressions cover large workbooks and malformed members |
 | 2026-10-18 | Slide thumbnails and the Slide Sorter render only the slides in view: on a deck of more than 600 slides they used to evict their own thumbnails, so the pane flashed white and never finished (#969) |
 | 2026-10-17 | Opening a file caps absurd effect sizes (glow, soft edges, shadows, reflections, on shapes, text and table text) at what Format Shape allows: a glow of 10^18 pt in a .pptx made rendering ask for 34 GB and abort |
