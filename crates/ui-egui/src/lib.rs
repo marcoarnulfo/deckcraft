@@ -54,7 +54,7 @@ pub type PickFn = Box<dyn FnMut(&str) -> Option<String>>;
 /// carrying that same id. Completing a cancelled or unknown id does nothing: the file is
 /// not applied to whichever document happens to be active.
 pub type OpenAsyncFn = Box<dyn FnMut(&str, u64)>;
-pub type DownloadFn = Box<dyn FnMut(&str, &[u8])>;
+pub type DownloadFn = Box<dyn FnMut(&str, &[u8]) -> Result<(), String>>;
 
 /// A file the host finished reading for the request `id` from [`SlideApp::begin_external_file`].
 #[derive(Clone, Debug)]
@@ -790,10 +790,13 @@ impl SlideApp {
     /// bar) when there are no bytes or no way to download.
     fn download(&mut self, name: &str, bytes: deckcraft_engine::Result<Vec<u8>>) -> bool {
         match (bytes, self.services.download.as_mut()) {
-            (Ok(b), Some(dl)) => {
-                dl(name, &b);
-                true
-            }
+            (Ok(b), Some(dl)) => match dl(name, &b) {
+                Ok(()) => true,
+                Err(e) => {
+                    self.set_status(e);
+                    false
+                }
+            },
             (Err(e), _) => {
                 self.set_status(e.to_string());
                 false
@@ -1333,7 +1336,11 @@ impl SlideApp {
             && let Some(d) = self.session.active()
         {
             match deckcraft_engine::cmd::file::save_bytes(&d.doc, ext) {
-                Ok(bytes) => dl(&suggested, &bytes),
+                Ok(bytes) => {
+                    if let Err(e) = dl(&suggested, &bytes) {
+                        self.set_status(e);
+                    }
+                }
                 Err(e) => self.set_status(e.to_string()),
             }
         }
@@ -2184,7 +2191,10 @@ mod tests {
         let got: Rc<RefCell<Vec<(String, Vec<u8>)>>> = Rc::default();
         let log = got.clone();
         let services = Services {
-            download: Some(Box::new(move |name: &str, b: &[u8]| log.borrow_mut().push((name.to_string(), b.to_vec())))),
+            download: Some(Box::new(move |name: &str, b: &[u8]| {
+                log.borrow_mut().push((name.to_string(), b.to_vec()));
+                Ok(())
+            })),
             ..Default::default()
         };
         let mut app = SlideApp::new(Session::with_new(), services);
@@ -2213,8 +2223,13 @@ mod tests {
         };
         let got: Rc<RefCell<Vec<String>>> = Rc::default();
         let log = got.clone();
-        let services =
-            Services { download: Some(Box::new(move |name: &str, _: &[u8]| log.borrow_mut().push(name.to_string()))), ..Default::default() };
+        let services = Services {
+            download: Some(Box::new(move |name: &str, _: &[u8]| {
+                log.borrow_mut().push(name.to_string());
+                Ok(())
+            })),
+            ..Default::default()
+        };
         let mut app = SlideApp::new(selected(), services);
         assert!(app.run("app.saveAsPictureDialog", json!({})).is_ok());
         assert_eq!(*got.borrow(), ["Picture.png"]);
@@ -2222,6 +2237,12 @@ mod tests {
         let mut app = SlideApp::new(selected(), Services::default());
         let err = app.run("app.saveAsPictureDialog", json!({})).unwrap_err();
         assert!(err.contains("file picker"), "{err}");
+
+        // The browser refused the download (Blob or DOM setup failed): the error comes through.
+        let services = Services { download: Some(Box::new(|_: &str, _: &[u8]| Err("blob failed".to_string()))), ..Default::default() };
+        let mut app = SlideApp::new(selected(), services);
+        let err = app.run("app.saveAsPictureDialog", json!({})).unwrap_err();
+        assert!(err.contains("blob failed"), "{err}");
     }
 
     fn title_text(app: &SlideApp) -> String {
