@@ -161,15 +161,20 @@ fn copy(s: &mut Session, p: &Value) -> Result<Value> {
     Ok(v)
 }
 
+/// Pixels per point of a copied slide's picture: 96 dpi, as PowerPoint's (a 10 in slide is
+/// 960 px wide).
+const SLIDE_PICTURE_SCALE: f64 = 96.0 / 72.0;
+
 /// With `picture`, a copy of slides also carries a PNG of the first copied slide in deck order
-/// (base64 `png`), for other apps to paste as a picture (#1309). Called before Cut deletes it.
+/// (base64 `png`) at [`SLIDE_PICTURE_SCALE`], for other apps to paste as a picture (#1309).
+/// Called before Cut deletes it.
 fn add_slide_picture(s: &Session, p: &Value, v: &mut Value) {
     if !bool_or(p, "picture", false) || s.clipboard.slides.is_empty() {
         return;
     }
     let Some(st) = s.active() else { return };
     let Some(i) = s.clipboard.slides.iter().filter_map(|sl| st.doc.slide_index(sl.id)).min() else { return };
-    let (png, _, _) = super::file::render_png(&st.doc, i, 1.0, false);
+    let (png, _, _) = super::file::render_png(&st.doc, i, SLIDE_PICTURE_SCALE, false);
     v["png"] = Value::String(base64_encode(&png));
 }
 

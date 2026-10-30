@@ -238,6 +238,18 @@ fn a_slide_copy_can_carry_a_picture_of_its_first_slide() {
     assert!(s.execute("edit.copy", &json!({"picture": true})).unwrap().get("png").is_none(), "shapes have no slide picture");
 }
 
+/// #1309: the copied slide's picture is 96 dpi, as PowerPoint's: a 10 in by 7.5 in slide is
+/// 960 by 720 pixels.
+#[test]
+fn a_slide_picture_is_96_dpi() {
+    let mut s = session();
+    s.execute("design.slideSize", &json!({"preset": "standard", "scale": "none"})).unwrap();
+    s.execute("slide.selectSlides", &json!({"indices": [0]})).unwrap();
+    let v = s.execute("edit.copy", &json!({"picture": true})).unwrap();
+    let png = cmd::base64_decode(v["png"].as_str().expect("png")).unwrap();
+    assert_eq!(image::load_from_memory(&png).unwrap().to_rgba8().dimensions(), (960, 720));
+}
+
 #[test]
 fn bold_copy_is_html_and_pages_html_pastes_bold() {
     let mut s = session();
