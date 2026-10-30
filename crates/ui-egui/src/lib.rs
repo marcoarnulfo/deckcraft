@@ -675,6 +675,9 @@ impl SlideApp {
         // for it (the control channel, MCP) does not get the PNG back.
         let asked = params.get("picture").and_then(Value::as_bool).unwrap_or(false);
         let copy = matches!(id, "edit.copy" | "edit.cut");
+        if copy && params.is_null() {
+            params = json!({});
+        }
         if copy
             && self.services.clipboard_set_image.is_some()
             && let Some(p) = params.as_object_mut()
@@ -3402,6 +3405,28 @@ mod tests {
 
         let asked = h.state_mut().run("edit.copy", json!({"scope": "slides", "picture": true})).unwrap();
         assert!(asked.get("png").is_some(), "asked, it comes back");
+    }
+
+    /// #1309: a Copy run with no parameters at all (`null`, not `{}`) offers the picture too.
+    #[test]
+    fn a_copy_with_no_parameters_offers_the_slide_picture() {
+        use std::cell::RefCell;
+        use std::rc::Rc;
+        let seen = Rc::new(RefCell::new(false));
+        let record = seen.clone();
+        let services = Services {
+            clipboard_set_image: Some(Box::new(move |_: &[u8], _: &str| {
+                *record.borrow_mut() = true;
+                true
+            })),
+            ..Default::default()
+        };
+        let mut h = step_app(services);
+        h.state_mut().session.execute("slide.selectSlides", &json!({"indices": [0]})).unwrap();
+        let v = h.state_mut().run("edit.copy", Value::Null).unwrap();
+        h.run_steps(1);
+        assert!(*seen.borrow(), "picture offered");
+        assert!(v.get("png").is_none(), "the caller did not ask for the picture");
     }
 
     fn redder(px: [u8; 4]) -> i32 {
