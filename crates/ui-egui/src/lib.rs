@@ -1958,9 +1958,16 @@ impl SlideApp {
             ctx.open_url(egui::OpenUrl::new_tab(url));
         }
         if let Some((t, png)) = self.pending_copy.take() {
-            let landed = png.is_some_and(|png| self.services.clipboard_set_image.as_mut().is_some_and(|f| f(&png, &system_clipboard_text(&t))));
-            if !landed {
-                ctx.copy_text(t);
+            match png {
+                // Copied slides: when the picture is refused, the text still carries the objects
+                // marker, as Ctrl+C leaves it, so Ctrl+V here pastes them.
+                Some(png) => {
+                    let text = system_clipboard_text(&t);
+                    if !self.services.clipboard_set_image.as_mut().is_some_and(|f| f(&png, &text)) {
+                        ctx.copy_text(text);
+                    }
+                }
+                None => ctx.copy_text(t),
             }
         }
         self.drain_requests();
@@ -3427,6 +3434,18 @@ mod tests {
         h.run_steps(1);
         assert!(*seen.borrow(), "picture offered");
         assert!(v.get("png").is_none(), "the caller did not ask for the picture");
+    }
+
+    /// #1309: when the host refuses the picture of an untitled slide copied from a menu, the
+    /// clipboard still gets the objects marker, so Ctrl+V here pastes the slide.
+    #[test]
+    fn a_menu_slide_copy_keeps_the_marker_when_the_picture_is_refused() {
+        let services = Services { clipboard_set_image: Some(Box::new(|_: &[u8], _: &str| false)), ..Default::default() };
+        let mut h = step_app(services);
+        h.state_mut().run("edit.copy", json!({"scope": "slides"})).unwrap();
+        h.run_steps(1);
+        let cmds = &h.output().platform_output.commands;
+        assert!(cmds.iter().any(|c| matches!(c, egui::output::OutputCommand::CopyText(t) if t == OBJECTS_MARKER)), "{cmds:?}");
     }
 
     fn redder(px: [u8; 4]) -> i32 {
